@@ -11,11 +11,11 @@ import (
 )
 
 type sshd struct {
-	addr           string
-	authKeyPath    string
-	privateKeyPath string
-	users          map[string]string
-	config         *ssh.ServerConfig
+	addr          string
+	authKeyPath   string
+	serverKeyPath string
+	users         map[string]string
+	config        *ssh.ServerConfig
 }
 
 func (d *sshd) readAuthorizedKeys() (map[string]bool, error) {
@@ -71,7 +71,7 @@ func (d *sshd) serverConfig() (*ssh.ServerConfig, error) {
 }
 
 func (d *sshd) readPrivateKey() (ssh.Signer, error) {
-	privateBytes, err := ioutil.ReadFile(d.privateKeyPath)
+	privateBytes, err := ioutil.ReadFile(d.serverKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load private key: %v", err)
 	}
