@@ -84,6 +84,26 @@ func (d *sshd) readPrivateKey() (ssh.Signer, error) {
 	return private, nil
 }
 
+// The incoming Request channel must be serviced.
+func handleGlobalRequests(in <-chan *ssh.Request) {
+	for req := range in {
+		log.Printf("--> global request: %v", req.Type)
+		if req.WantReply {
+			req.Reply(false, nil)
+		}
+	}
+}
+
+// Sessions have out-of-band requests such as "shell",
+// "pty-req" and "env".  Here we handle only the
+// "shell" request.
+func handleChannelRequests(in <-chan *ssh.Request) {
+	for req := range in {
+		log.Printf("--> channel request: %v", req.Type)
+		req.Reply(req.Type == "shell", nil)
+	}
+}
+
 func (d *sshd) handleConn(nConn net.Conn) error {
 	// Before use, a handshake must be performed on the incoming
 	// net.Conn.
@@ -93,8 +113,7 @@ func (d *sshd) handleConn(nConn net.Conn) error {
 	}
 	log.Printf("logged in with key %s", conn.Permissions.Extensions["pubkey-fp"])
 
-	// The incoming Request channel must be serviced.
-	go ssh.DiscardRequests(reqs)
+	go handleGlobalRequests(reqs)
 
 	// Service the incoming Channel channel.
 	for newChannel := range chans {
@@ -102,6 +121,7 @@ func (d *sshd) handleConn(nConn net.Conn) error {
 		// protocol intended. In the case of a shell, the type is
 		// "session" and ServerShell may be used to present a simple
 		// terminal interface.
+		log.Printf("--> channel: %v", newChannel.ChannelType())
 		if newChannel.ChannelType() != "session" {
 			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
 			continue
@@ -111,14 +131,7 @@ func (d *sshd) handleConn(nConn net.Conn) error {
 			return fmt.Errorf("Could not accept channel: %v", err)
 		}
 
-		// Sessions have out-of-band requests such as "shell",
-		// "pty-req" and "env".  Here we handle only the
-		// "shell" request.
-		go func(in <-chan *ssh.Request) {
-			for req := range in {
-				req.Reply(req.Type == "shell", nil)
-			}
-		}(requests)
+		go handleChannelRequests(requests)
 
 		term := terminal.NewTerminal(channel, "> ")
 
